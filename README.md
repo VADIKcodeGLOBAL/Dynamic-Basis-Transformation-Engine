@@ -26,7 +26,9 @@ In a standard engine, the basis is fixed:
 
 ### 2. Shader-Centric Spatial Mapping
 Instead of relying on standard CPU-side Transform components, DBTE utilizes a custom **Basis-Aware Vertex Shader**. Every vertex position $P$ is calculated as a linear combination of the dynamic basis:
-$$P_{transformed} = x\vec{i}_{dyn} + y\vec{j}_{dyn} + z\vec{k}_{dyn}$$
+
+$$P_{transformed} = x\vec{i}_{dyn} + y\vec{j}_{dyn} + z\vec{k}_{dyn}$$ 
+
 This offloads the spatial deformation to the GPU, allowing for real-time manipulation of complex environments.
 
 ### 3. Non-Euclidean Topologies
