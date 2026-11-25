@@ -1,0 +1,44 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="DBTE Prototype: Global Basis"
+config/description="Stage 1 prototype: one global dynamic basis applied in the vertex shader, shadows included."
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[rendering]
+
+anti_aliasing/quality/msaa_3d=2
+
+[shader_globals]
+
+dbte_origin={
+"type": "vec3",
+"value": Vector3(0, 0, 0)
+}
+dbte_basis_i={
+"type": "vec3",
+"value": Vector3(1, 0, 0)
+}
+dbte_basis_j={
+"type": "vec3",
+"value": Vector3(0, 1, 0)
+}
+dbte_basis_k={
+"type": "vec3",
+"value": Vector3(0, 0, 1)
+}
