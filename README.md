@@ -45,4 +45,69 @@ By mapping basis transformations to the player's position, the engine can simula
 * **Linear Algebra Physics:** A collision detection system that operates within distorted coordinate spaces.
 * **Procedural Visuals:** Built-in support for "Shear" and "Skew" effects that don't break shadow mapping.
 
+---
+
+## Project status
+
+DBTE is being built as a **C++ library plus engine plugins**, starting with Godot 4, rather than as a new engine.
+Stages 1 and 2 of 4 are in review: the architecture, repository skeleton, CI and Godot prototype, and the dbte-core library.
+Stage 3, the Godot plugin, is next.
+
+| Stage | Result |
+| --- | --- |
+| 1. Architecture and skeleton | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), build, CI, [global-basis prototype](prototypes/global-basis) |
+| 2. dbte-core | [core/](core) and [docs/math.md](docs/math.md): deformers, the mapping and its inverse, validation, GPU packing, unit tests |
+| 3. Godot plugin | `addons/dbte`: nodes, shaders and editor tools |
+| 4. Demo | A hub and three rooms: shear, Escher corridor, infinite corridor |
+
+## Repository layout
+
+| Path | Contents |
+| --- | --- |
+| `core/` | dbte-core: engine-agnostic C++20 library and its tests |
+| `prototypes/global-basis/` | Stage 1 Godot prototype: one global basis, shadows included |
+| `integrations/godot/` | Godot plugin (Stage 3) |
+| `demo/godot/` | Demo project (Stage 4) |
+| `docs/` | Architecture and math |
+
+## Build dbte-core
+
+Requires CMake 3.24+ and a C++20 compiler (Visual Studio 2022, GCC 13+ or Clang 18+).
+
+```sh
+cmake -S . -B build
+cmake --build build --config Release
+ctest --test-dir build --build-config Release --output-on-failure
+```
+
+The microbenchmark is `build/core/bench/dbte_bench` (`build\core\bench\Release\dbte_bench.exe` on Windows).
+
+To use dbte-core from your own CMake project, add this repository as a subdirectory and link `dbte::core`:
+
+```cmake
+add_subdirectory(Dynamic-Basis-Transformation-Engine)
+target_link_libraries(my_game PRIVATE dbte::core)
+```
+
+```cpp
+#include <dbte/dbte.hpp>
+
+// A corridor along +y that bends upwards by 90 degrees with a radius of 4 m.
+dbte::Bend bend;
+bend.curvature = 0.25f;
+bend.length = 6.2832f;  // a quarter circle: 2 * pi * 4 / 4
+const dbte::DeformationField field({bend});
+
+const dbte::Vec3 seen = field.map({0.0f, 8.0f, 0.0f});      // where the player sees the point
+const dbte::Vec3 back = field.inverse(seen).point;           // and back to logical space
+const dbte::Vec3 normal = field.map_normal({0.0f, 8.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
+```
+
+## Try the prototype
+
+Open `prototypes/global-basis/project.godot` in [Godot 4.7](https://godotengine.org/download/) and press F5.
+The [prototype README](prototypes/global-basis/README.md) lists the controls and what to look for.
+
+---
+
 How to contribute: Check out the Issues tab, join our discussions, or submit a Pull Request. Every idea counts.

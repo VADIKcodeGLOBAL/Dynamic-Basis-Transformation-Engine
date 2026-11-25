@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    name: core · ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows MSVC
+            os: windows-2025
+            cxx: ""
+          - name: Linux GCC
+            os: ubuntu-24.04
+            cxx: g++
+          - name: Linux Clang
+            os: ubuntu-24.04
+            cxx: clang++
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        shell: bash
+        run: |
+          extra=()
+          if [[ -n "${{ matrix.cxx }}" ]]; then
+            extra+=("-DCMAKE_CXX_COMPILER=${{ matrix.cxx }}")
+          fi
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DDBTE_BUILD_TESTS=ON "${extra[@]}"
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      # Numbers from shared runners are noisy; they show the order of magnitude and catch
+      # big regressions when compared across runs.
+      - name: Benchmark
+        shell: bash
+        run: |
+          bench=$(find build -type f \( -name dbte_bench -o -name dbte_bench.exe \) | head -n 1)
+          "$bench"
+
+  sanitizers:
+    name: core · Linux GCC sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++
+          -DDBTE_BUILD_TESTS=ON -DDBTE_BUILD_BENCHMARKS=OFF
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install clang-format 18
+        run: sudo apt-get update -q && sudo apt-get install -y -q clang-format-18
+
+      - name: Check formatting
+        run: |
+          files=$(git ls-files '*.hpp' '*.cpp' '*.h')
+          if [ -n "$files" ]; then
+            clang-format-18 --dry-run --Werror $files
+          fi
+
+  godot-prototype:
+    name: Godot prototype smoke test
+    runs-on: ubuntu-24.04
+    env:
+      GODOT_VERSION: 4.7.2-stable
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download Godot ${{ env.GODOT_VERSION }}
+        run: |
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${GODOT_VERSION}_linux.x86_64" godot
+          ./godot --version
+
+      # Headless mode has no GPU, so this checks that the project imports and that
+      # the scripts load and run for a few frames. The visual check (deformed
+      # geometry and shadows) is done in the editor on a real machine.
+      - name: Import and run headless
+        run: |
+          ./godot --headless --path prototypes/global-basis --import 2>&1 | tee import.log
+          ./godot --headless --path prototypes/global-basis --quit-after 120 2>&1 | tee run.log
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script" import.log run.log; then
+            echo "::error::The prototype has script errors (see the log above)."
+            exit 1
+          fi

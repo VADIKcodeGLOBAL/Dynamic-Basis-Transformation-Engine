@@ -58,4 +58,11 @@ $$P_{\text{transformed}} = x\vec{i}_{\text{dyn}} + y\vec{j}_{\text{dyn}} + z\vec
 
 ---
 
+## Статус проекта
+
+DBTE строится как **библиотека на C++ и плагины к готовым движкам**, первым идёт Godot 4. Этапы 1 и 2 из 4 на проверке: архитектура, каркас репозитория, CI, первый прототип в Godot и библиотека dbte-core. Следующий этап: плагин для Godot.
+Подробности (на английском): [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/math.md](docs/math.md) и [прототип global-basis](prototypes/global-basis).
+
+---
+
 **Как участвовать:** изучите вкладку Issues, присоединяйтесь к обсуждениям или отправляйте Pull Request. Любая идея имеет значение!

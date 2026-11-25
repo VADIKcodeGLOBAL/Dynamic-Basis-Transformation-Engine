@@ -1,0 +1,19 @@
+# CMake build output
+/build*/
+/out/
+CMakeUserPresets.json
+compile_commands.json
+.cache/
+
+# IDEs
+.vs/
+.vscode/
+.idea/
+*.user
+
+# Godot editor cache (per machine, regenerated on import)
+.godot/
+
+# OS files
+.DS_Store
+Thumbs.db
