@@ -17,3 +17,7 @@ TEST_CASE("version string matches the numeric version") {
     const std::string expected = std::format("{}.{}.{}", v.major, v.minor, v.patch);
     CHECK(dbte::version_string() == expected);
 }
+
+TEST_CASE("headers match the CMake project version") {
+    CHECK(dbte::version_string() == std::string_view(DBTE_PROJECT_VERSION));
+}

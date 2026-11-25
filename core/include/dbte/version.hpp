@@ -12,12 +12,12 @@ struct Version {
 };
 
 /// Version of the headers you compile against. Keep in sync with project() in CMakeLists.txt.
-inline constexpr Version kVersion{0, 1, 0};
+inline constexpr Version kVersion{0, 2, 0};
 
 /// Version of the compiled library, to detect a header/library mismatch at run time.
 [[nodiscard]] Version version() noexcept;
 
-/// The library version as text, for example "0.1.0".
+/// The library version as text, for example "0.2.0".
 [[nodiscard]] std::string_view version_string() noexcept;
 
 }  // namespace dbte
