@@ -20,6 +20,10 @@ add_executable(dbte_core_tests
     main.cpp
     test_version.cpp)
 target_link_libraries(dbte_core_tests PRIVATE dbte::core doctest::doctest)
+# Let doctest include the real <ostream> instead of forward-declaring std types.
+# Newer MSVC STL releases fail to stringify std::string_view against doctest's
+# forward declarations ("use of undefined type std::basic_ostream").
+target_compile_definitions(dbte_core_tests PRIVATE DOCTEST_CONFIG_USE_STD_HEADERS)
 dbte_set_warnings(dbte_core_tests)
 
 add_test(NAME dbte_core_tests COMMAND dbte_core_tests)
