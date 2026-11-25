@@ -50,12 +50,13 @@ By mapping basis transformations to the player's position, the engine can simula
 ## Project status
 
 DBTE is being built as a **C++ library plus engine plugins**, starting with Godot 4, rather than as a new engine.
-Stage 1 of 4 is in progress: architecture, repository skeleton, CI and a first Godot prototype.
+Stages 1 and 2 of 4 are in review: the architecture, repository skeleton, CI and Godot prototype, and the dbte-core library.
+Stage 3, the Godot plugin, is next.
 
 | Stage | Result |
 | --- | --- |
 | 1. Architecture and skeleton | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), build, CI, [global-basis prototype](prototypes/global-basis) |
-| 2. dbte-core | Deformers, the mapping and its inverse, validation, GPU packing, unit tests |
+| 2. dbte-core | [core/](core) and [docs/math.md](docs/math.md): deformers, the mapping and its inverse, validation, GPU packing, unit tests |
 | 3. Godot plugin | `addons/dbte`: nodes, shaders and editor tools |
 | 4. Demo | A hub and three rooms: shear, Escher corridor, infinite corridor |
 
@@ -77,6 +78,29 @@ Requires CMake 3.24+ and a C++20 compiler (Visual Studio 2022, GCC 13+ or Clang 
 cmake -S . -B build
 cmake --build build --config Release
 ctest --test-dir build --build-config Release --output-on-failure
+```
+
+The microbenchmark is `build/core/bench/dbte_bench` (`build\core\bench\Release\dbte_bench.exe` on Windows).
+
+To use dbte-core from your own CMake project, add this repository as a subdirectory and link `dbte::core`:
+
+```cmake
+add_subdirectory(Dynamic-Basis-Transformation-Engine)
+target_link_libraries(my_game PRIVATE dbte::core)
+```
+
+```cpp
+#include <dbte/dbte.hpp>
+
+// A corridor along +y that bends upwards by 90 degrees with a radius of 4 m.
+dbte::Bend bend;
+bend.curvature = 0.25f;
+bend.length = 6.2832f;  // a quarter circle: 2 * pi * 4 / 4
+const dbte::DeformationField field({bend});
+
+const dbte::Vec3 seen = field.map({0.0f, 8.0f, 0.0f});      // where the player sees the point
+const dbte::Vec3 back = field.inverse(seen).point;           // and back to logical space
+const dbte::Vec3 normal = field.map_normal({0.0f, 8.0f, 0.0f}, {0.0f, 0.0f, 1.0f});
 ```
 
 ## Try the prototype

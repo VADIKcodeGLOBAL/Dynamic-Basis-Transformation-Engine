@@ -1,7 +1,8 @@
 # DBTE architecture
 
-Status: draft for Stage 1, November 2026. This document fixes the model that the code
-follows. Change it in the same pull request as the code that changes the model.
+Status: Stage 2 (dbte-core 0.2.0), November 2026. This document fixes the model that the
+code follows; [math.md](math.md) specifies every formula exactly. Change them in the same
+pull request as the code that changes the model.
 
 ## 1. Purpose and scope
 
@@ -99,7 +100,9 @@ J_v(p) = I + w(p)\,(B_v - I) + \big((B_v - I)(p - c)\big)\,\nabla w(p)^{\mathsf 
 ### 4.5 Several deformers
 
 Deformers are applied as a chain. If every link is invertible, so is the chain, and the
-Jacobian is the product of the links' Jacobians:
+Jacobian is the product of the links' Jacobians. Each deformer also has a 24-bit layer
+mask, and so does every piece of geometry; a deformer applies only where the masks share a
+bit. That keeps, for example, the bend of one corridor away from the room next to it.
 
 ```math
 \Phi = \Phi_n \circ \dots \circ \Phi_1, \qquad J(p) = J_n(p_{n-1}) \cdots J_1(p_0), \qquad p_k = \Phi_k(p_{k-1}),\; p_0 = p
@@ -122,8 +125,10 @@ deformation, the wider the edge.
 ### 4.7 Inverse mapping
 
 Needed to bring visible-space points back into logical space: mouse picking, raycasts,
-audio. It is exact for a global basis and for the inside of an affine volume. Otherwise the
-core uses Newton's method, at most 8 iterations, starting from the previous frame's result:
+audio. The core inverts the chain link by link in reverse order. Every deformer has a
+closed-form inverse except the soft edge of an affine volume, where the core uses Newton's
+method with backtracking, at most 8 iterations, starting from the affine map with the
+weight taken at q:
 
 ```math
 p_{k+1} = p_k - J(p_k)^{-1}\,\big(\Phi(p_k) - q\big)
@@ -140,25 +145,31 @@ whole path (Shoemake and Duff, 1992).
 B(t) = \operatorname{slerp}(R_0, R_1, t)\,\big((1 - t)\,S_0 + t\,S_1\big)
 ```
 
-The Stage 1 prototype still blends the basis vectors linearly; its presets are chosen so
-that det B stays positive.
+dbte-core implements this as `interpolate_bases`. The Stage 1 prototype still blends the
+basis vectors linearly; its presets are chosen so that det B stays positive.
 
 ### 4.9 Deformers for the demo
 
 | Deformer | What it does | Used in |
 | --- | --- | --- |
-| Global basis | One basis for the whole world (§4.1) | Prototype |
+| `GlobalBasis` | One basis for the whole world (§4.1) | Prototype |
 | `AffineVolume` | Shear and scale inside a sphere or box with a soft edge (§4.4) | Shear room |
 | `Bend` | Bends space around an axis (Barr, 1984); beyond the bend, space follows rigidly | Escher corridor |
 | `Twist` | Rotates cross-sections by an angle that grows along an axis (Barr, 1984) | Later rooms |
 | `Taper` | Scales cross-sections along an axis (Barr, 1984) | Later rooms |
 | `CorridorCompression` | Compresses distance along a corridor relative to the player (below) | Infinite corridor |
 
-Corridor compression, where z_p is the player's position along the corridor and a is the
-largest visible distance. The derivative is always positive, so the mapping is invertible:
+Every deformer has a weight from 0 (no effect) to 1 for animating it in and out: the bend
+unbends, the twist unwinds, the compression relaxes. The exact formulas, Jacobians and
+inverses are in [math.md](math.md).
+
+Corridor compression, where y is the coordinate along the corridor from its entrance, y_p
+is the player's coordinate and a is the largest visible distance. The second term keeps the
+entrance in place, so the corridor joins the room before it without a gap. The derivative
+is always positive, so the mapping is invertible:
 
 ```math
-z_W = z_p + a\,\tanh\!\left(\frac{z_L - z_p}{a}\right), \qquad \frac{\partial z_W}{\partial z_L} = \operatorname{sech}^2\!\left(\frac{z_L - z_p}{a}\right) > 0
+y_W = a\left(\tanh\frac{y_L - y_p}{a} + \tanh\frac{y_p}{a}\right), \qquad \frac{\partial y_W}{\partial y_L} = \operatorname{sech}^2\frac{y_L - y_p}{a} > 0
 ```
 
 ## 5. Physics, camera and objects in visible space
@@ -176,32 +187,48 @@ z_W = z_p + a\,\tanh\!\left(\frac{z_L - z_p}{a}\right), \qquad \frac{\partial z_
 - **Culling.** The engine culls by bounds in L. The plugin enlarges each affected mesh's
   bounds to cover its image under Φ, so deformed meshes and shadows do not pop.
 
-## 6. CPU–GPU data contract (draft v1)
+## 6. CPU–GPU data contract (v1)
 
-The core packs all active deformers into one float texture; shaders read it with
-`texelFetch` in the vertex stage. Formulas on both sides must match exactly.
+The core packs all deformers into one float texture; shaders read it with `texelFetch` in
+the vertex stage and evaluate the formulas of [math.md](math.md). `dbte::gpu::pack` in
+`core/include/dbte/gpu_layout.hpp` writes this layout, and a unit test packs and unpacks
+every deformer type and compares the results.
 
 Global shader parameters:
 
 | Name | Type | Meaning |
 | --- | --- | --- |
 | `dbte_data` | `sampler2D`, RGBA32F, 1 row | Packed deformers, 6 texels each |
-| `dbte_count` | `int` | Number of active deformers, at most 64 in the demo |
+| `dbte_count` | `int` | Number of deformers, at most 64 |
 | `dbte_layout_version` | `int` | Version of this layout, 1 |
 
-Texels of deformer n (column 6n + t):
+Texels of deformer n are columns 6n to 6n + 5; texel t, channel c is float 4t + c of the
+deformer's block:
 
 | t | x | y | z | w |
 | --- | --- | --- | --- | --- |
-| 0 | type | shape | r_in | r_out |
-| 1 | centre.x | centre.y | centre.z | weight |
-| 2 | column 0 (i).x | i.y | i.z | param 0 |
-| 3 | column 1 (j).x | j.y | j.z | param 1 |
-| 4 | column 2 (k).x | k.y | k.z | param 2 |
-| 5 | extents.x | extents.y | extents.z | param 3 |
+| 0 | type | layers | weight | param 0 |
+| 1 | origin.x | origin.y | origin.z | param 1 |
+| 2 | matrix column i.x | i.y | i.z | param 2 |
+| 3 | matrix column j.x | j.y | j.z | param 3 |
+| 4 | matrix column k.x | k.y | k.z | param 4 |
+| 5 | extents.x | extents.y | extents.z | param 5 |
 
-Deformers are evaluated in index order (§4.5). A unit test packs and unpacks every
-deformer type and compares the results. The Stage 1 prototype uses four plain `vec3`
+`type` and `layers` are integers stored as floats, exact up to 2^24, so layer masks have
+24 bits.
+
+| type | Deformer | origin | matrix | extents | params 0–5 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Global basis | origin | basis | unused | unused |
+| 2, 3 | Affine volume: sphere, box | centre | basis | half extents (box) | inner, outer, orientation quaternion x, y, z, w (box) |
+| 4 | Bend | frame origin | frame rotation | region of interest | curvature, length |
+| 5 | Twist | frame origin | frame rotation | region of interest | length, angle |
+| 6 | Taper | frame origin | frame rotation | region of interest | length, scale x, scale z |
+| 7 | Corridor compression | frame origin | frame rotation | region of interest | max distance, player |
+
+Unused fields are zero. The region of interest is for the validator and editor tools only;
+shaders ignore it. Deformers are evaluated in index order (§4.5), and only those whose
+layers share a bit with the material's mask. The Stage 1 prototype uses four plain `vec3`
 globals instead (`dbte_origin`, `dbte_basis_i`, `dbte_basis_j`, `dbte_basis_k`).
 
 ## 7. Godot integration (Stage 3)
@@ -233,11 +260,11 @@ globals instead (`dbte_origin`, `dbte_basis_i`, `dbte_basis_j`, `dbte_basis_k`).
 
 ```
 core/                     dbte-core: C++20, no dependencies
-  include/dbte/  src/  tests/
+  include/dbte/  src/  tests/  bench/
 integrations/godot/       GDExtension and the addons/dbte folder (Stage 3)
 prototypes/global-basis/  Stage 1 prototype (Godot project)
 demo/godot/               the demo project (Stage 4)
-docs/                     this document, later math.md and getting-started.md
+docs/                     this document and math.md; later getting-started.md
 cmake/                    shared CMake helpers
 .github/workflows/        CI
 ```
@@ -257,15 +284,19 @@ An extension built for an older Godot minor version runs on newer ones, not the 
 round, so targeting 4.7 also covers 4.8. Revisit the pins when Stage 3 starts.
 
 CI (GitHub Actions) builds and tests dbte-core on Windows (MSVC) and Linux (GCC and Clang),
-checks formatting, and runs the Godot prototype headless as a smoke test. Windows comes
+runs the tests again under AddressSanitizer and UndefinedBehaviorSanitizer, runs the
+microbenchmark, checks formatting, and runs the Godot prototype headless as a smoke test. Windows comes
 first: it is the main platform for the demo, Linux is second, macOS is not a target yet.
 
 ## 11. Testing
 
-- **Unit tests (doctest)** for every core feature, including property tests with a fixed
-  seed: Φ⁻¹(Φ(p)) ≈ p, analytic J against finite differences, mapped normals stay
+- **Unit tests (doctest)** for every core feature, with property tests on fixed-seed
+  random samples: Φ⁻¹(Φ(p)) ≈ p, analytic J against finite differences, mapped normals stay
   perpendicular to mapped tangents, det J > 0 for valid configurations, a zero weight gives
-  the identity, and no jump at a volume's edge.
+  the identity, no jump at a volume's edge, the validator's minimum against dense sampling,
+  and pack/unpack round trips. The random numbers do not depend on the compiler, so every
+  platform runs the same cases.
+- **Microbenchmark** `dbte_bench` measures map and inverse per deformer and for a chain.
 - **CPU–GPU agreement:** a Godot scene places markers computed on the CPU on vertices
   deformed on the GPU. The Stage 1 prototype already does this for one point.
 - **Manual checks** on the two reference machines: a laptop with a GTX 1660 Mobile

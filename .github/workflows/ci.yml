@@ -48,6 +48,32 @@ jobs:
       - name: Test
         run: ctest --test-dir build --build-config Release --output-on-failure
 
+      # Numbers from shared runners are noisy; they show the order of magnitude and catch
+      # big regressions when compared across runs.
+      - name: Benchmark
+        shell: bash
+        run: |
+          bench=$(find build -type f \( -name dbte_bench -o -name dbte_bench.exe \) | head -n 1)
+          "$bench"
+
+  sanitizers:
+    name: core · Linux GCC sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=g++
+          -DDBTE_BUILD_TESTS=ON -DDBTE_BUILD_BENCHMARKS=OFF
+          "-DCMAKE_CXX_FLAGS=-fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
   format:
     name: clang-format
     runs-on: ubuntu-24.04
